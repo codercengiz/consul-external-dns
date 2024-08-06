@@ -32,7 +32,7 @@ async fn main() {
     // Create Consul session
     println!("=> Creating Consul session");
     let consul_session = consul_client
-        .create_session(config.consul_ttl, cancel.clone())
+        .create_session(cancel.clone())
         .await
         .expect("===> failed to create Consul session");
     let session_id = consul_session.session_id;
@@ -60,7 +60,7 @@ async fn create_consul_client(config: &Config) -> ConsulClient {
             config.consul_address.clone(),
             // Can not use datacenter until this PR is merged:
             // https://github.com/hashicorp/consul/pull/21208
-            None
+            None,
         ) {
             Ok(client) => return client,
             Err(e) => {

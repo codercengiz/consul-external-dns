@@ -55,7 +55,7 @@ struct CreateSessionRequest {
     behavior: &'static str,
     /// How long the session will survive without being renewed.
     #[serde(rename = "TTL")]
-    ttl: SessionDuration,
+    ttl: &'static str,
     /// How long the locks held by this session should keep being held after the session
     /// has expired.
     #[serde(rename = "LockDelay")]
@@ -120,13 +120,12 @@ impl ConsulClient {
     /// This session is used to acquire a lock
     pub async fn create_session(
         &self,
-        ttl: Duration,
         token: CancellationToken,
     ) -> Result<ConsulSession, anyhow::Error> {
         let session_request = CreateSessionRequest {
             name: "external-dns",
             behavior: "release",
-            ttl: ttl.try_into()?,
+            ttl: "30s",
             lock_delay: "30s",
         };
 
@@ -142,8 +141,13 @@ impl ConsulClient {
         let session_response: CreateSessionResponse = resp.json().await?;
 
         let join_handle = tokio::spawn(
-            session_handler(self.clone(), token, session_response.id, ttl)
-                .context("failed to create Consul session handler")?,
+            session_handler(
+                self.clone(),
+                token,
+                session_response.id,
+                Duration::from_secs(30),
+            )
+            .context("failed to create Consul session handler")?,
         );
 
         Ok(ConsulSession {
