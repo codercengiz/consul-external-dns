@@ -115,7 +115,6 @@ async fn process_dns_records(
         );
 
         println!("The services in Consul have changed now; DNS records in the DNS provider need to be updated.");
-        let mut all_success = true;
 
         println!("=> Creating DNS records in the DNS provider");
         for fetched_dns_record in &new_dns_tags_from_services {
@@ -124,18 +123,21 @@ async fn process_dns_records(
                 .any(|r| r == fetched_dns_record)
             {
                 // If the record is not in the DNS state, create it and store it in Consul
-                let record_id = match dns_provider.create_dns_record(fetched_dns_record).await {
-                    Ok(record_id) => record_id,
-                    Err(e) => {
-                        eprintln!("===> failed to create DNS record: {}", e);
-                        all_success = false;
-                        continue;
+                match dns_provider.create_dns_record(fetched_dns_record).await {
+                    Ok(record_id) => {
+                        updated_dns_records.insert(record_id, fetched_dns_record.clone());
+                        println!(
+                            "===> DNS record `{}` created in DNS provider ",
+                            fetched_dns_record.hostname
+                        );
                     }
-                };
-                println!("===> DNS record created in DNS provider");
-
-                // Update the new_dns_state hashmap with the new record
-                updated_dns_records.insert(record_id, fetched_dns_record.clone());
+                    Err(e) => {
+                        eprintln!(
+                            "===> failed to create DNS record `{}` : {}",
+                            fetched_dns_record.hostname, e
+                        );
+                    }
+                }
             }
         }
 
@@ -148,11 +150,16 @@ async fn process_dns_records(
             {
                 // Delete the record from the DNS provider
                 if let Err(e) = dns_provider.delete_dns_record(record_id).await {
-                    eprintln!("===> failed to delete DNS record: {}", e);
-                    all_success = false;
+                    eprintln!(
+                        "===> failed to delete DNS record `{}`: {}",
+                        record.hostname, e
+                    );
                     continue;
                 };
-                println!("===> DNS record deleted from DNS provider");
+                println!(
+                    "===> DNS record `{}` deleted from DNS provider",
+                    record.hostname
+                );
 
                 // Remove the record from the new_dns_state hashmap
                 updated_dns_records.remove(record_id);
@@ -160,31 +167,24 @@ async fn process_dns_records(
         }
 
         println!("=> Storing all DNS records in Consul KV store");
-        if all_success {
+        if current_consul_dns_records != updated_dns_records {
             match consul_client
-                .update_consul_dns_records(updated_dns_records)
+                .update_consul_dns_records(updated_dns_records.clone())
                 .await
             {
-                Ok(()) => println!("===> stored all DNS records in Consul"),
+                Ok(()) => println!("===> some DNS records were updated in DNS provider and stored in Consul successfully"),
                 Err(e) => {
                     eprintln!("===> failed to store all DNS records in Consul: {}", e);
-                    all_success = false;
                 }
             }
-
-            if all_success {
-                println!("All DNS updates or creations succeeded.");
-            } else {
-                eprintln!("Some DNS updates or creations failed.");
-            }
-
-            tokio::select! {
-                _ = cancel_token.cancelled() => {
-                    println!("Exiting Consul External DNS, because the cancel token was triggered.");
-                    break;
-                }
-                _ = sleep(Duration::from_secs(1)) => {},
-            };
         }
+
+        tokio::select! {
+            _ = cancel_token.cancelled() => {
+                println!("Exiting Consul External DNS, because the cancel token was triggered.");
+                break;
+            }
+            _ = sleep(Duration::from_secs(1)) => {},
+        };
     }
 }
