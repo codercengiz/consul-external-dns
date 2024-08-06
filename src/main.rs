@@ -58,7 +58,9 @@ async fn create_consul_client(config: &Config) -> ConsulClient {
     loop {
         match ConsulClient::new(
             config.consul_address.clone(),
-            config.consul_datacenter.clone(),
+            // Can not use datacenter until this PR is merged:
+            // https://github.com/hashicorp/consul/pull/21208
+            None
         ) {
             Ok(client) => return client,
             Err(e) => {

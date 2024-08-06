@@ -320,7 +320,7 @@ impl ConsulClient {
 
 fn parse_dns_tags(tags: Vec<String>) -> Vec<DnsRecord> {
     const PREFIX: &str = "external-dns.";
-    // Parse service tags of the format `external-dns.<field>=<value>`.
+    // Parse service tags of the format `external-dns.<identifier>.<field>=<value>`.
     let mut dns_tags: HashMap<String, HashMap<String, String>> = HashMap::new();
     for tag in tags.into_iter() {
         let Some(rest) = tag.strip_prefix(PREFIX) else {

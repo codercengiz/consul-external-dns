@@ -17,10 +17,6 @@ pub struct Config {
     #[arg(long, default_value = "localhost:8500")]
     pub consul_address: url::Url,
 
-    /// Optionally sets the datacenter of the Consul server.
-    #[arg(long)]
-    pub consul_datacenter: Option<String>,
-
     /// Consul TTL times out after this duration without being renewed
     #[arg(long, default_value = "30s", value_parser = humantime::parse_duration)]
     pub consul_ttl: Duration,

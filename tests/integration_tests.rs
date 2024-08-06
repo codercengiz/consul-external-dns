@@ -94,12 +94,11 @@ mod tests {
             }),
             consul_address: url::Url::parse(format!("http://{}:{}", hostname, port).as_str())
                 .expect("Invalid URL"),
-            consul_datacenter: None,
             consul_ttl: std::time::Duration::from_secs(30),
         };
 
         let consul_client =
-            ConsulClient::new(config.consul_address, config.consul_datacenter.clone())
+            ConsulClient::new(config.consul_address, None)
                 .expect("Failed to create Consul client");
 
         let mut consul_index: Option<String> = None;
