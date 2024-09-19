@@ -1,13 +1,13 @@
-use std::collections::HashMap;
 use std::time::Duration;
 
 use clap::Parser;
 
 use consul_external_dns::hetzner_dns;
+use reqwest::Client;
 use tokio::time::sleep;
 
 use consul_external_dns::config::{Config, DnsProvider};
-use consul_external_dns::consul::{ConsulClient, DnsRecord};
+use consul_external_dns::consul::ConsulClient;
 use consul_external_dns::dns_trait::DnsProviderTrait;
 use tokio_util::sync::CancellationToken;
 
@@ -32,7 +32,10 @@ async fn main() {
     println!("===> parsed successfully");
 
     let dns_provider: Box<dyn DnsProviderTrait> = match config.clone().dns_provider {
-        DnsProvider::Hetzner(config) => Box::new(hetzner_dns::HetznerDns { config }),
+        DnsProvider::Hetzner(config) => Box::new(hetzner_dns::HetznerDns {
+            config,
+            reqwest_client: Client::new(),
+        }),
     };
 
     // Initialize Consul Client

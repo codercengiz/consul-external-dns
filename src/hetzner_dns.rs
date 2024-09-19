@@ -10,17 +10,13 @@ use crate::{
 };
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct RecordsWrapper {
-    records: Vec<DnsRecord>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 struct RecordResponse {
     record: DnsRecord,
 }
 
 pub struct HetznerDns {
     pub config: HetznerConfig,
+    pub reqwest_client: Client,
 }
 
 #[async_trait]
@@ -38,9 +34,9 @@ impl DnsProviderTrait for HetznerDns {
             "ttl": dns_record.ttl
         });
 
-        let client = Client::new();
         let url = self.config.api_url.join("records")?;
-        let res = client
+        let res = self
+            .reqwest_client
             .post(url)
             .header("Auth-API-Token", &self.config.dns_token)
             .json(&new_record)
@@ -57,8 +53,8 @@ impl DnsProviderTrait for HetznerDns {
             .config
             .api_url
             .join(&format!("records/{}", record_id))?;
-        let client = Client::new();
-        client
+
+        self.reqwest_client
             .delete(url)
             .header("Auth-API-Token", &self.config.dns_token)
             .send()

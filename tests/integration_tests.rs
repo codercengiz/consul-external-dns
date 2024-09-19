@@ -14,7 +14,7 @@ mod tests {
     use consul_external_dns::hetzner_dns::HetznerDns;
     use fake::Fake;
     use mockito::Server;
-    use reqwest::Url;
+    use reqwest::{Client, Url};
 
     use crate::fixtures::{self, EnvironmentManager};
     use crate::mocks::{consul_mock, hetzner_mock};
@@ -29,7 +29,7 @@ mod tests {
             dns_zone_id: "fake_zone_id".to_string(),
             api_url: url::Url::parse(&server.url()).expect("Invalid URL"),
         };
-        let hetzner_dns = HetznerDns { config };
+        let hetzner_dns = HetznerDns { config , reqwest_client: Client::new() };
         let consul_dns_record = DnsRecord {
             hostname: "new.example.com".to_string(),
             type_: DnsType::A,
