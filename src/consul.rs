@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::dns_trait::DnsType;
 
-const CONSUL_STORE_KEY: &str = "dns_records_lock";
+const CONSUL_STORE_KEY: &str = "consul_external_dns";
 
 #[derive(Copy, Clone)]
 enum SessionDuration {
