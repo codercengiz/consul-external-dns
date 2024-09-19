@@ -13,7 +13,18 @@ use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() {
-    let cancel = CancellationToken::new();
+    let cancel_token = CancellationToken::new();
+    tokio::spawn({
+        let token = cancel_token.clone();
+        async move {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to listen for SIGINT");
+            println!("Received SIGINT, triggering shutdown");
+            token.cancel();
+        }
+    });
+
     println!("Starting up Consul External DNS");
 
     println!("=> Parsing configuration");
@@ -32,7 +43,7 @@ async fn main() {
     // Create Consul session
     println!("=> Creating Consul session");
     let consul_session = consul_client
-        .create_session(cancel.clone())
+        .create_session(cancel_token.clone())
         .await
         .expect("===> failed to create Consul session");
     let session_id = consul_session.session_id;
@@ -46,7 +57,7 @@ async fn main() {
     }
     println!("===> acquired Consul lock successfully");
 
-    process_dns_records(consul_client, dns_provider, cancel).await;
+    process_dns_records(consul_client, dns_provider, cancel_token).await;
 
     consul_session
         .join_handle
