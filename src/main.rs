@@ -38,12 +38,13 @@ async fn main() {
     // Initialize Consul Client
     println!("=> Creating Consul client");
 
-    let consul_client=ConsulClient::new(
+    let consul_client = ConsulClient::new(
         config.consul_address.clone(),
         // Can not use datacenter until this PR is merged:
         // https://github.com/hashicorp/consul/pull/21208
         None,
-    ).expect("===> failed to create Consul client");    
+    )
+    .expect("===> failed to create Consul client");
     println!("===> created Consul client successfully");
 
     // Create Consul session
@@ -79,8 +80,6 @@ async fn process_dns_records(
     let mut consul_dns_index: Option<String> = None;
 
     loop {
-        let mut updated_dns_records: HashMap<String, DnsRecord> = HashMap::new();
-
         // Fetch current DNS records from Consul store
         println!("=> Fetching DNS records from Consul store");
         let current_consul_dns_records = match consul_client.fetch_all_dns_records().await {
@@ -95,7 +94,7 @@ async fn process_dns_records(
             current_consul_dns_records.len()
         );
 
-        updated_dns_records.extend(current_consul_dns_records.clone());
+        let mut updated_dns_records = current_consul_dns_records.clone();
 
         // Fetch DNS tags from the services in Consul
         // This is the long polling request that will block until there are changes
