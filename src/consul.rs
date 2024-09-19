@@ -106,7 +106,7 @@ impl ConsulClient {
         let kv_api_base_url = consul_address.join("v1/")?.join("kv/")?;
         let catalog_api_base_url = consul_address.join("v1/")?.join("catalog/")?;
         let session_api_base_url = consul_address.join("v1/")?.join("session/")?;
-        let client = reqwest::Client::builder().build()?;
+        let client = reqwest::Client::new();
         Ok(ConsulClient {
             http_client: client,
             kv_api_base_url,
