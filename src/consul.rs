@@ -12,6 +12,7 @@ use tokio::{
     time::{interval, MissedTickBehavior},
 };
 use tokio_util::sync::CancellationToken;
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::dns_trait::DnsType;
@@ -118,10 +119,7 @@ impl ConsulClient {
 
     /// Create a new session in Consul
     /// This session is used to acquire a lock
-    pub async fn create_session(
-        &self,
-        token: CancellationToken,
-    ) -> Result<ConsulSession, anyhow::Error> {
+    pub async fn create_session(&self, token: CancellationToken) -> Result<ConsulSession> {
         let session_request = CreateSessionRequest {
             name: "external-dns",
             behavior: "release",
@@ -172,11 +170,11 @@ impl ConsulClient {
 
             // If the lock is acquired, the response body will be "true"
             if body.starts_with("true") {
-                println!("=====> Acquired Consul lock");
+                info!("Acquired Consul lock");
                 return Ok(());
             }
 
-            println!("=====> Failed to acquire Consul lock");
+            warn!("Failed to acquire Consul lock, retrying...");
             // We limit re-checks to at most every 10 seconds, so we don't spam the server in case we
             // didn't acquire the lock even though it claims it to be free.
             interval.tick().await;
@@ -185,7 +183,7 @@ impl ConsulClient {
         }
     }
 
-    async fn wait_for_lock(&self) -> Result<(), anyhow::Error> {
+    async fn wait_for_lock(&self) -> Result<()> {
         let mut consul_index: Option<String> = None;
         loop {
             let lock_url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?;
@@ -207,7 +205,7 @@ impl ConsulClient {
 
             for kv in kvs {
                 if kv.key == CONSUL_STORE_KEY && kv.session.is_none() {
-                    println!("=====> lock is free, returning");
+                    info!("Consul lock is now free");
                     return Ok(());
                 }
             }
@@ -218,7 +216,7 @@ impl ConsulClient {
     pub async fn fetch_service_tags(
         &self,
         consul_index: &mut Option<String>,
-    ) -> Result<Vec<DnsRecord>, anyhow::Error> {
+    ) -> Result<Vec<DnsRecord>> {
         let services_url = self.catalog_api_base_url.join("services")?;
 
         let mut req = self.http_client.get(services_url);
@@ -239,7 +237,7 @@ impl ConsulClient {
             if let Ok(index_str) = index_header.to_str() {
                 let _ = consul_index.insert(index_str.to_string());
             } else {
-                eprintln!("Failed to convert HeaderValue to string");
+                error!("Failed to convert X-Consul-Index header to string");
             }
         }
 
@@ -271,7 +269,7 @@ impl ConsulClient {
 
     /// Fetches all DNS records from Consul.
     /// This function retrieves the state of all DNS records stored under a specific Consul key.
-    pub async fn fetch_all_dns_records(&self) -> Result<HashMap<String, DnsRecord>, anyhow::Error> {
+    pub async fn fetch_all_dns_records(&self) -> Result<HashMap<String, DnsRecord>> {
         let url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?;
 
         let resp = self.http_client.get(url).send().await?;
@@ -280,7 +278,10 @@ impl ConsulClient {
             if resp.status() == StatusCode::NOT_FOUND {
                 return Ok(HashMap::new());
             }
-            anyhow::bail!(resp.status());
+            bail!(
+                "Failed to fetch DNS records from Consul Store: {}",
+                resp.status()
+            );
         }
 
         let body = resp.bytes().await?;
@@ -330,19 +331,19 @@ fn parse_dns_tags(tags: Vec<String>) -> Vec<DnsRecord> {
     let mut records = Vec::new();
     for (identifier, mut tags) in dns_tags {
         let Some(hostname) = tags.remove("hostname") else {
-            println!("Missing hostname for identifier: {}", identifier);
+            error!("Missing hostname for identifier: {}", identifier);
             continue;
         };
 
         let type_string = tags.remove("type");
         let type_: DnsType = match type_string.as_ref().map(|t| t.parse()) {
             None => {
-                println!("Missing type for identifier: {}", identifier);
+                error!("Missing type for identifier: {}", identifier);
                 continue;
             }
             Some(Ok(t)) => t,
             Some(Err(e)) => {
-                eprintln!(
+                error!(
                     "Unsupported record type {} specified for identifier {}: {}",
                     type_string.unwrap_or_default(),
                     identifier,
@@ -356,12 +357,12 @@ fn parse_dns_tags(tags: Vec<String>) -> Vec<DnsRecord> {
             None => None,
             Some(Ok(ttl)) => Some(ttl),
             Some(Err(e)) => {
-                eprintln!("Failed to parse TTL for identifier {}: {}", identifier, e);
+                error!("Failed to parse TTL for identifier {}: {}", identifier, e);
                 continue;
             }
         };
         let Some(value) = tags.remove("value") else {
-            println!("Missing value for identifier: {}", identifier);
+            error!("Missing value for identifier: {}", identifier);
             continue;
         };
 
@@ -403,13 +404,13 @@ fn session_handler(
             // Wait for either cancellation or an interval tick to have passed.
             tokio::select! {
                 _ = token.cancelled() => {
-                    println!("Consul session handler was cancelled");
+                    info!("Consul session handler was cancelled");
                     break;
                 },
                 _ = interval.tick() => {},
             };
 
-            println!("Renewing Consul session");
+            info!("Renewing Consul session");
             let res: std::result::Result<_, _> = client
                 .http_client
                 .put(renewal_url.clone())
@@ -417,13 +418,13 @@ fn session_handler(
                 .await
                 .and_then(|res| res.error_for_status());
             if let Err(err) = res {
-                eprintln!("Renewing Consul session failed, aborting: {err}");
+                error!("Failed to renew Consul session: {}", err);
                 token.cancel();
                 return;
             }
         }
 
-        println!("Destroying Consul session");
+        info!("Destroying Consul session");
         let res = client
             .http_client
             .put(destroy_url)
@@ -431,7 +432,7 @@ fn session_handler(
             .await
             .and_then(|res| res.error_for_status());
         if let Err(err) = res {
-            eprintln!("Destraying Consul session failed: {err}");
+            error!("Failed to destroy Consul session: {}", err);
         }
     })
 }

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -22,10 +23,7 @@ pub struct HetznerDns {
 #[async_trait]
 impl DnsProviderTrait for HetznerDns {
     /// Create a DNS record based on the Consul service tags
-    async fn create_dns_record<'a>(
-        &self,
-        dns_record: &'a consul::DnsRecord,
-    ) -> Result<String, anyhow::Error> {
+    async fn create_dns_record<'a>(&self, dns_record: &'a consul::DnsRecord) -> Result<String> {
         let new_record = json!({
             "zone_id": self.config.dns_zone_id,
             "type": dns_record.type_,

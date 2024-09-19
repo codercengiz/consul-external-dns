@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use clap::Parser;
 
+use anyhow::Result;
 use consul_external_dns::hetzner_dns;
 use reqwest::Client;
 use tokio::time::sleep;
@@ -10,9 +11,10 @@ use consul_external_dns::config::{Config, DnsProvider};
 use consul_external_dns::consul::ConsulClient;
 use consul_external_dns::dns_trait::DnsProviderTrait;
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let cancel_token = CancellationToken::new();
     tokio::spawn({
         let token = cancel_token.clone();
@@ -20,16 +22,16 @@ async fn main() {
             tokio::signal::ctrl_c()
                 .await
                 .expect("failed to listen for SIGINT");
-            println!("Received SIGINT, triggering shutdown");
+            info!("Received SIGINT, triggering shutdown");
             token.cancel();
         }
     });
 
-    println!("Starting up Consul External DNS");
+    info!("Starting up Consul External DNS");
 
-    println!("=> Parsing configuration");
-    let config = Config::try_parse().expect("===> failed to parse configuration");
-    println!("===> parsed successfully");
+    debug!("Parsing configuration");
+    let config = Config::try_parse()?;
+    info!("Configuration parsed successfully");
 
     let dns_provider: Box<dyn DnsProviderTrait> = match config.clone().dns_provider {
         DnsProvider::Hetzner(config) => Box::new(hetzner_dns::HetznerDns {
@@ -39,61 +41,46 @@ async fn main() {
     };
 
     // Initialize Consul Client
-    println!("=> Creating Consul client");
-
+    debug!("Creating Consul client");
     let consul_client = ConsulClient::new(
         config.consul_address.clone(),
         // Can not use datacenter until this PR is merged:
         // https://github.com/hashicorp/consul/pull/21208
         None,
-    )
-    .expect("===> failed to create Consul client");
-    println!("===> created Consul client successfully");
+    )?;
+    info!("Created Consul client successfully");
 
     // Create Consul session
-    println!("=> Creating Consul session");
-    let consul_session = consul_client
-        .create_session(cancel_token.clone())
-        .await
-        .expect("===> failed to create Consul session");
+    debug!("Creating Consul session");
+    let consul_session = consul_client.create_session(cancel_token.clone()).await?;
     let session_id = consul_session.session_id;
-    println!("===> created Consul session successfully");
+    info!("Created Consul session successfully");
 
     // Acquire Lock
-    println!("=> Acquiring Consul lock");
-    if let Err(e) = consul_client.acquire_lock(session_id).await {
-        eprintln!("===> failed to acquire Consul lock: {}", e);
-        return;
-    }
-    println!("===> acquired Consul lock successfully");
+    debug!("Acquiring Consul lock");
+    consul_client.acquire_lock(session_id).await?;
+    info!("Acquired Consul lock successfully");
 
-    process_dns_records(consul_client, dns_provider, cancel_token).await;
+    process_dns_records(consul_client, dns_provider, cancel_token).await?;
 
-    consul_session
-        .join_handle
-        .await
-        .expect("Failed to join Consul session handler task");
+    consul_session.join_handle.await?;
+
+    Ok(())
 }
 
 async fn process_dns_records(
     consul_client: ConsulClient,
     dns_provider: Box<dyn DnsProviderTrait>,
     cancel_token: CancellationToken,
-) {
+) -> Result<()> {
     let mut consul_dns_index: Option<String> = None;
 
     loop {
         // Fetch current DNS records from Consul store
-        println!("=> Fetching DNS records from Consul store");
-        let current_consul_dns_records = match consul_client.fetch_all_dns_records().await {
-            Ok(records) => records,
-            Err(e) => {
-                eprintln!("===> failed to fetch Consul DNS records: {}", e);
-                return;
-            }
-        };
-        println!(
-            "===> fetched Consul DNS records successfully with total records: {}",
+        debug!("Fetching DNS records from Consul store");
+        let current_consul_dns_records = consul_client.fetch_all_dns_records().await?;
+        info!(
+            "Fetched {} DNS records from Consul store",
             current_consul_dns_records.len()
         );
 
@@ -102,25 +89,18 @@ async fn process_dns_records(
         // Fetch DNS tags from the services in Consul
         // This is the long polling request that will block until there are changes
         // in the Consul Services. The timeout is set to 100 seconds.
-        println!("=> Fetching DNS tags from Consul Services");
-        let new_dns_tags_from_services = match consul_client
+        debug!("Fetching DNS tags from Consul Services");
+        let new_dns_tags_from_services = consul_client
             .fetch_service_tags(&mut consul_dns_index)
-            .await
-        {
-            Ok(tags) => tags,
-            Err(e) => {
-                eprintln!("===> failed to fetch Consul DNS tags: {}", e);
-                return;
-            }
-        };
-        println!(
-            "===> fetched Consul DNS tags successfully, total tags: {}",
+            .await?;
+        info!(
+            "Fetched {} DNS tags from Consul services",
             new_dns_tags_from_services.len()
         );
 
-        println!("The services in Consul have changed now; DNS records in the DNS provider need to be updated.");
+        info!("Services in Consul have changed; updating DNS records in DNS provider.");
 
-        println!("=> Creating DNS records in the DNS provider");
+        debug!("Creating DNS records in the DNS provider");
         for fetched_dns_record in &new_dns_tags_from_services {
             if !current_consul_dns_records
                 .values()
@@ -130,14 +110,14 @@ async fn process_dns_records(
                 match dns_provider.create_dns_record(fetched_dns_record).await {
                     Ok(record_id) => {
                         updated_dns_records.insert(record_id, fetched_dns_record.clone());
-                        println!(
-                            "===> DNS record `{}` created in DNS provider ",
+                        info!(
+                            "Created DNS record `{}` in DNS provider",
                             fetched_dns_record.hostname
                         );
                     }
                     Err(e) => {
-                        eprintln!(
-                            "===> failed to create DNS record `{}` : {}",
+                        error!(
+                            "Failed to create DNS record `{}`: {}",
                             fetched_dns_record.hostname, e
                         );
                     }
@@ -146,7 +126,7 @@ async fn process_dns_records(
         }
 
         // Delete DNS records from Consul state that are not in the fetched_dns_records
-        println!("=> Deleting DNS records from the DNS provider");
+        debug!("Deleting DNS records from the DNS provider");
         for (record_id, record) in current_consul_dns_records.iter() {
             if !new_dns_tags_from_services
                 .iter()
@@ -154,39 +134,35 @@ async fn process_dns_records(
             {
                 // Delete the record from the DNS provider
                 if let Err(e) = dns_provider.delete_dns_record(record_id).await {
-                    eprintln!(
-                        "===> failed to delete DNS record `{}`: {}",
-                        record.hostname, e
-                    );
+                    error!("Failed to delete DNS record `{}`: {}", record.hostname, e);
                     continue;
                 };
-                println!(
-                    "===> DNS record `{}` deleted from DNS provider",
-                    record.hostname
-                );
+                info!("Deleted DNS record `{}` from DNS provider", record.hostname);
 
                 // Remove the record from the new_dns_state hashmap
                 updated_dns_records.remove(record_id);
             }
         }
 
-        println!("=> Storing all DNS records in Consul KV store");
+        debug!("Storing all DNS records in Consul KV store");
         if current_consul_dns_records != updated_dns_records {
             match consul_client
                 .update_consul_dns_records(updated_dns_records.clone())
                 .await
             {
-                Ok(()) => println!("===> some DNS records were updated in DNS provider and stored in Consul successfully"),
+                Ok(()) => {
+                    info!("Updated DNS records in DNS provider and stored in Consul successfully")
+                }
                 Err(e) => {
-                    eprintln!("===> failed to store all DNS records in Consul: {}", e);
+                    error!("Failed to store all DNS records in Consul: {}", e);
                 }
             }
         }
 
         tokio::select! {
             _ = cancel_token.cancelled() => {
-                println!("Exiting Consul External DNS, because the cancel token was triggered.");
-                break;
+                info!("Exiting Consul External DNS because the cancel token was triggered.");
+                break Ok(());
             }
             _ = sleep(Duration::from_secs(1)) => {},
         };

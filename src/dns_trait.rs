@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::fmt::Display;
 
 use async_trait::async_trait;
@@ -50,12 +51,9 @@ impl Display for DnsType {
 
 #[async_trait]
 pub trait DnsProviderTrait {
-    async fn create_dns_record<'a>(
-        &self,
-        dns_record: &'a consul::DnsRecord,
-    ) -> Result<String, anyhow::Error>;
+    async fn create_dns_record<'a>(&self, dns_record: &'a consul::DnsRecord) -> Result<String>;
 
-    async fn delete_dns_record<'a>(&self, record_id: &'a str) -> Result<(), anyhow::Error>;
+    async fn delete_dns_record<'a>(&self, record_id: &'a str) -> Result<()>;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
