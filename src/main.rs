@@ -37,7 +37,13 @@ async fn main() {
 
     // Initialize Consul Client
     println!("=> Creating Consul client");
-    let consul_client = create_consul_client(&config).await;
+
+    let consul_client=ConsulClient::new(
+        config.consul_address.clone(),
+        // Can not use datacenter until this PR is merged:
+        // https://github.com/hashicorp/consul/pull/21208
+        None,
+    ).expect("===> failed to create Consul client");    
     println!("===> created Consul client successfully");
 
     // Create Consul session
@@ -63,23 +69,6 @@ async fn main() {
         .join_handle
         .await
         .expect("Failed to join Consul session handler task");
-}
-
-async fn create_consul_client(config: &Config) -> ConsulClient {
-    loop {
-        match ConsulClient::new(
-            config.consul_address.clone(),
-            // Can not use datacenter until this PR is merged:
-            // https://github.com/hashicorp/consul/pull/21208
-            None,
-        ) {
-            Ok(client) => return client,
-            Err(e) => {
-                eprintln!("===> failed to create Consul client: {}", e);
-                sleep(Duration::from_millis(100)).await;
-            }
-        }
-    }
 }
 
 async fn process_dns_records(
