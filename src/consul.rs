@@ -156,21 +156,6 @@ impl ConsulClient {
         })
     }
 
-    /// Renew the Consul session
-    pub async fn renew_session(&self, session_id: Uuid) -> Result<(), anyhow::Error> {
-        let session_url = self
-            .session_api_base_url
-            .join(&format!("renew/{}", session_id))?;
-
-        self.http_client
-            .put(session_url)
-            .send()
-            .await?
-            .error_for_status()?;
-        println!("Renewed Consul session: {}", session_id);
-        Ok(())
-    }
-
     /// Acquire a lock
     pub async fn acquire_lock(&self, session_id: Uuid) -> Result<()> {
         let mut interval = interval(Duration::from_secs(10));
@@ -295,7 +280,7 @@ impl ConsulClient {
             if resp.status() == StatusCode::NOT_FOUND {
                 return Ok(HashMap::new());
             }
-            return Err(anyhow::anyhow!(resp.status()));
+            anyhow::bail!(resp.status());
         }
 
         let body = resp.bytes().await?;
