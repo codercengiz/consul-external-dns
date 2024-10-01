@@ -73,6 +73,7 @@ jobs:
           tag: ${{ github.ref_name }}
           asset_name: consul_external_dns-${{ steps.extract_version.outputs.version }}-${{ matrix.target }}
           body: ${{ steps.changelog_entry.outputs.content }}
+          release_name: ${{ github.ref_name }}
         if: startsWith(github.ref_name, 'v') && github.ref_type == 'tag'
 
   container-images:
