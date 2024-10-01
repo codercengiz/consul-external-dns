@@ -1,0 +1,130 @@
+name: Build and Publish Consul-External-DNS
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    name: Binary ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+          - target: x86_64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
+          - target: aarch64-unknown-linux-gnu
+          - target: armv7-unknown-linux-musleabihf
+          - target: armv7-unknown-linux-gnueabihf
+          - target: arm-unknown-linux-musleabihf
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - run: sudo apt update && sudo apt install musl-tools
+
+      - name: Build
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: build
+          args: --release
+          target: ${{ matrix.target }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/consul_external_dns
+
+      - name: Get version from tag
+        id: extract_version
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Install CHANGELOG parser
+        uses: taiki-e/install-action@parse-changelog
+
+      - name: Get CHANGELOG entry
+        run: parse-changelog CHANGELOG.md ${{ steps.extract_version.outputs.version }} | tee changelog_entry
+        if: startsWith(github.ref_name, 'v') && github.ref_type == 'tag'
+        shell: bash
+
+      - name: Read changelog entry from file
+        id: changelog_entry
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./changelog_entry
+        if: startsWith(github.ref_name, 'v') && github.ref_type == 'tag'
+
+      - name: Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/consul_external_dns
+          tag: ${{ github.ref_name }}
+          asset_name: consul_external_dns-${{ steps.extract_version.outputs.version }}-${{ matrix.target }}
+          body: ${{ steps.changelog_entry.outputs.content }}
+        if: startsWith(github.ref_name, 'v') && github.ref_type == 'tag'
+
+  container-images:
+    name: Publish Docker Images
+    runs-on: ubuntu-latest
+    needs: publish
+    if: (startsWith(github.ref_name, 'v') && github.ref_type == 'tag')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install qemu-user-static
+        run: sudo apt update && sudo apt install qemu-user-static
+
+      # Download binary artifacts for each target
+      - name: Download artifact - aarch64-unknown-linux-gnu
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-unknown-linux-gnu
+          path: target/aarch64-unknown-linux-gnu/release
+
+      - name: Download artifact - x86_64-unknown-linux-gnu
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-unknown-linux-gnu
+          path: target/x86_64-unknown-linux-gnu/release
+
+      - name: Download artifact - armv7-unknown-linux-gnueabihf
+        uses: actions/download-artifact@v4
+        with:
+          name: armv7-unknown-linux-gnueabihf
+          path: target/armv7-unknown-linux-gnueabihf/release
+
+      # Podman login for container registry
+      - name: Podman Login
+        run: podman login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} ghcr.io
+
+      # Build and tag Docker images for different architectures
+      - name: Podman build linux/arm64
+        run: podman build --format docker --platform linux/arm64/v8 --manifest consul-external-dns -f Containerfile target/aarch64-unknown-linux-gnu/release
+
+      - name: Podman build linux/amd64
+        run: podman build --format docker --platform linux/amd64 --manifest consul-external-dns -f Containerfile target/x86_64-unknown-linux-gnu/release
+
+      - name: Podman build linux/arm
+        run: podman build --format docker --platform linux/arm/v7 --manifest consul-external-dns -f Containerfile target/armv7-unknown-linux-gnueabihf/release
+
+      # Push Docker images with version tag
+      - name: Podman manifest push version tag
+        run: podman manifest push consul-external-dns ghcr.io/codercengiz/consul-external-dns:${{ needs.publish.outputs.version }}
+
+      # Push Docker images with 'latest' tag
+      - name: Podman manifest push latest
+        run: podman manifest push consul-external-dns ghcr.io/codercengiz/consul-external-dns:latest
