@@ -13,6 +13,7 @@ anyhow = "1.0"
 async-trait = "0.1.80"
 clap = { version = "4", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = [
+    "http2",
     "rustls-tls",
     "json",
 ] }

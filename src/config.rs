@@ -34,7 +34,7 @@ pub struct HetznerConfig {
     #[arg(
         long,
         env = "HETZNER_DNS_API_URL",
-        default_value = "https://dns.hetzner.com/api/v1"
+        default_value = "https://dns.hetzner.com/api/v1/"
     )]
     pub api_url: url::Url,
 }
