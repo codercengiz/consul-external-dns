@@ -58,6 +58,14 @@ async fn main() -> Result<()> {
 
     // Acquire Lock
     debug!("Acquiring Consul lock");
+    if cancel_token
+        .run_until_cancelled(consul_client.acquire_lock(session_id))
+        .await
+        .transpose()?
+        .is_none()
+    {
+        return Ok(());
+    };
     consul_client.acquire_lock(session_id).await?;
     info!("Acquired Consul lock successfully");
 
@@ -90,9 +98,13 @@ async fn process_dns_records(
         // This is the long polling request that will block until there are changes
         // in the Consul Services. The timeout is set to 100 seconds.
         debug!("Fetching DNS tags from Consul Services");
-        let new_dns_tags_from_services = consul_client
-            .fetch_service_tags(&mut consul_dns_index)
-            .await?;
+        let Some(new_dns_tags_from_services) = cancel_token
+            .run_until_cancelled(consul_client.fetch_service_tags(&mut consul_dns_index))
+            .await
+            .transpose()?
+        else {
+            return Ok(());
+        };
         info!(
             "Fetched {} DNS tags from Consul services",
             new_dns_tags_from_services.len()
