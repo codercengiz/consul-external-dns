@@ -89,38 +89,38 @@ jobs:
       - name: Install qemu-user-static
         run: sudo apt update && sudo apt install qemu-user-static
 
-      # Download binary artifacts for each target
-      - name: Download artifact - aarch64-unknown-linux-gnu
+      # Download binary artifacts for musl targets
+      - name: Download artifact - aarch64-unknown-linux-musl
         uses: actions/download-artifact@v4
         with:
-          name: aarch64-unknown-linux-gnu
-          path: target/aarch64-unknown-linux-gnu/release
+          name: aarch64-unknown-linux-musl
+          path: target/aarch64-unknown-linux-musl/release
 
-      - name: Download artifact - x86_64-unknown-linux-gnu
+      - name: Download artifact - x86_64-unknown-linux-musl
         uses: actions/download-artifact@v4
         with:
-          name: x86_64-unknown-linux-gnu
-          path: target/x86_64-unknown-linux-gnu/release
+          name: x86_64-unknown-linux-musl
+          path: target/x86_64-unknown-linux-musl/release
 
-      - name: Download artifact - armv7-unknown-linux-gnueabihf
+      - name: Download artifact - armv7-unknown-linux-musleabihf
         uses: actions/download-artifact@v4
         with:
-          name: armv7-unknown-linux-gnueabihf
-          path: target/armv7-unknown-linux-gnueabihf/release
+          name: armv7-unknown-linux-musleabihf
+          path: target/armv7-unknown-linux-musleabihf/release
 
       # Podman login for container registry
       - name: Podman Login
         run: podman login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} ghcr.io
 
-      # Build and tag Docker images for different architectures
+      # Build and tag Docker images for different architectures using musl binaries
       - name: Podman build linux/arm64
-        run: podman build --format docker --platform linux/arm64/v8 --manifest consul-external-dns -f Containerfile target/aarch64-unknown-linux-gnu/release
+        run: podman build --format docker --platform linux/arm64/v8 --manifest consul-external-dns -f Containerfile target/aarch64-unknown-linux-musl/release
 
       - name: Podman build linux/amd64
-        run: podman build --format docker --platform linux/amd64 --manifest consul-external-dns -f Containerfile target/x86_64-unknown-linux-gnu/release
+        run: podman build --format docker --platform linux/amd64 --manifest consul-external-dns -f Containerfile target/x86_64-unknown-linux-musl/release
 
       - name: Podman build linux/arm
-        run: podman build --format docker --platform linux/arm/v7 --manifest consul-external-dns -f Containerfile target/armv7-unknown-linux-gnueabihf/release
+        run: podman build --format docker --platform linux/arm/v7 --manifest consul-external-dns -f Containerfile target/armv7-unknown-linux-musleabihf/release
 
       # Push Docker images with version tag
       - name: Podman manifest push version tag
