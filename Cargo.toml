@@ -25,6 +25,7 @@ tokio-util = "0.7.11"
 url = "2.5.0"
 humantime = "2.1.0"
 tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [dev-dependencies]
 mockito = "1.4.0"

@@ -12,9 +12,14 @@ use consul_external_dns::consul::ConsulClient;
 use consul_external_dns::dns_trait::DnsProviderTrait;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or("info".parse().unwrap()))
+        .init();
+
     let cancel_token = CancellationToken::new();
     tokio::spawn({
         let token = cancel_token.clone();
