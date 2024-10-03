@@ -12,7 +12,7 @@ pub enum DnsProvider {
 #[command(author, about, version)]
 pub struct Config {
     /// Specifies the address of the Consul server.
-    #[arg(long, default_value = "http://localhost:8500")]
+    #[arg(long, env, default_value = "http://localhost:8500")]
     pub consul_address: url::Url,
 
     #[command(subcommand)]
