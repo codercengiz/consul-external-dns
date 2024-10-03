@@ -27,7 +27,7 @@ pub struct HetznerConfig {
     pub dns_token: String,
 
     /// Sets the Hetzner DNS zone ID
-    #[arg(long)]
+    #[arg(long, env = "HETZNER_DNS_ZONE_ID")]
     pub dns_zone_id: String,
 
     /// Sets the Hetzner DNS API URL.
