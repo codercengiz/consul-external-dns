@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::dns_trait::DnsType;
 
-const CONSUL_STORE_KEY: &str = "consul_external_dns";
+const CONSUL_STORE_KEY: &str = "consul_external_dns/";
 
 #[derive(Copy, Clone)]
 enum SessionDuration {
@@ -160,7 +160,7 @@ impl ConsulClient {
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
-            let lock_url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?;
+            let lock_url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?.join("lock")?;
 
             let mut req = self.http_client.put(lock_url);
             req = req.query(&[("acquire", &session_id.to_string())]);
@@ -186,7 +186,7 @@ impl ConsulClient {
     async fn wait_for_lock(&self) -> Result<()> {
         let mut consul_index: Option<String> = None;
         loop {
-            let lock_url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?;
+            let lock_url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?.join("lock")?;
 
             let mut req = self.http_client.get(lock_url);
 
@@ -256,7 +256,7 @@ impl ConsulClient {
         &self,
         dns_state: HashMap<String, DnsRecord>,
     ) -> Result<()> {
-        let url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?;
+        let url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?.join("state")?;
 
         self.http_client
             .put(url)
@@ -270,7 +270,7 @@ impl ConsulClient {
     /// Fetches all DNS records from Consul.
     /// This function retrieves the state of all DNS records stored under a specific Consul key.
     pub async fn fetch_all_dns_records(&self) -> Result<HashMap<String, DnsRecord>> {
-        let url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?;
+        let url = self.kv_api_base_url.join(CONSUL_STORE_KEY)?.join("state")?;
 
         let resp = self.http_client.get(url).send().await?;
 
