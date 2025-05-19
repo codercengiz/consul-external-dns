@@ -87,8 +87,6 @@ struct ConsulLock {
 struct ConsulKVResponse {
     #[serde(rename = "Value")]
     value: Option<String>,
-    #[serde(rename = "Key")]
-    key: String,
     #[serde(rename = "Session")]
     session: Option<String>,
 }
@@ -203,8 +201,8 @@ impl ConsulClient {
 
             let kvs = response.json::<Vec<ConsulKVResponse>>().await?;
 
-            for kv in kvs {
-                if kv.key == CONSUL_STORE_KEY && kv.session.is_none() {
+            if let Some(kv) = kvs.first() {
+                if kv.session.is_none() {
                     info!("Consul lock is now free");
                     return Ok(());
                 }
