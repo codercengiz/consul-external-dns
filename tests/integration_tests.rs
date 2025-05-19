@@ -193,8 +193,18 @@ mod tests {
             .spawn()
             .expect("Failed to run Nomad job");
 
-        // Wait for a fixed time to allow the app to finish the saving of the DNS record
-        std::thread::sleep(std::time::Duration::from_secs(5));
+        let start_time = std::time::Instant::now();
+        let max_wait = std::time::Duration::from_secs(20);
+
+        // Wait for the HTTP request to be received with a timeout of 20 seconds
+        // This prevents test failures when CI environment is slow to process requests
+        while !create_mock_1.matched() && start_time.elapsed() < max_wait {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            println!(
+                "Waiting for HTTP request to be received... ({:?} elapsed)",
+                start_time.elapsed()
+            );
+        }
 
         // After the job is run, the DNS create API should be called with the new DNS record
         create_mock_1.assert();
