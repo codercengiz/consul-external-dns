@@ -87,8 +87,6 @@ struct ConsulLock {
 struct ConsulKVResponse {
     #[serde(rename = "Value")]
     value: Option<String>,
-    #[serde(rename = "Key")]
-    key: String,
     #[serde(rename = "Session")]
     session: Option<String>,
 }
@@ -193,7 +191,8 @@ impl ConsulClient {
             if let Some(index) = consul_index.take() {
                 req = req.query(&[("index", &index)]);
             }
-            let response = req.send().await?;
+
+            let response = req.timeout(Duration::from_secs(30)).send().await?;
 
             consul_index = response
                 .headers()
@@ -203,12 +202,13 @@ impl ConsulClient {
 
             let kvs = response.json::<Vec<ConsulKVResponse>>().await?;
 
-            for kv in kvs {
-                if kv.key == CONSUL_STORE_KEY && kv.session.is_none() {
+            if let Some(kv) = kvs.first() {
+                if kv.session.is_none() {
                     info!("Consul lock is now free");
                     return Ok(());
                 }
             }
+            warn!("Consul lock is still held, waiting...");
         }
     }
 
