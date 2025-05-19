@@ -208,6 +208,7 @@ impl ConsulClient {
                     return Ok(());
                 }
             }
+            warn!("Consul lock is still held, waiting...");
         }
     }
 
