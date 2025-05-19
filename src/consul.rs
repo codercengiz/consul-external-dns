@@ -191,7 +191,8 @@ impl ConsulClient {
             if let Some(index) = consul_index.take() {
                 req = req.query(&[("index", &index)]);
             }
-            let response = req.send().await?;
+
+            let response = req.timeout(Duration::from_secs(30)).send().await?;
 
             consul_index = response
                 .headers()
