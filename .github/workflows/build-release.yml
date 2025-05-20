@@ -31,12 +31,11 @@ jobs:
 
       - run: sudo apt update && sudo apt install musl-tools
 
-      - name: Build
-        uses: houseabsolute/actions-rust-cross@v0
-        with:
-          command: build
-          args: --release
-          target: ${{ matrix.target }}
+      - name: Install cross
+        run: cargo install cross
+
+      - name: Build with cross
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
