@@ -5,7 +5,7 @@
 ## Features
 
 - Automatic DNS record synchronization between Consul and supported DNS providers.
-- Currently supports **Hetzner DNS**.
+- Currently supports **Hetzner Cloud** and **Hetzner DNS**.
 - Integrates seamlessly with the Nomad/Consul service mesh.
 
 ## How It Works
@@ -15,7 +15,7 @@ Consul External DNS monitors services registered in Consul that are tagged with 
 ### Process:
 1. Services register themselves in Consul via Nomad.
 2. Consul External DNS monitors Consul for changes to services tagged with `external-dns.enable=true` (e.g., new services, updated IPs).
-3. It then automatically updates the DNS records with the appropriate DNS provider (currently Hetzner), ensuring that external DNS records always reflect the current state of the services in the cluster.
+3. It then automatically updates the DNS records with the appropriate DNS provider, ensuring that external DNS records always reflect the current state of the services in the cluster.
 
 ## Installation
 
@@ -44,7 +44,19 @@ Configuration is handled via environment variables and command-line arguments.
   - Default: `localhost:8500`
   - Example: `--consul-address http://127.0.0.1:8500`
 
-#### Hetzner-Specific Arguments:
+#### Hetzner Cloud-Specific Arguments
+- **`--api-token`**: Sets the Hetzner Cloud API token.
+  - Can be set via the environment variable: `HETZNER_CLOUD_API_TOKEN`
+
+- **`--dns-zone`**: Sets the DNS zone.
+  - Can be set via the environment variable: `HETZNER_CLOUD_DNS_ZONE`
+  - Example: `--dns-zone example.com`
+
+- **`--api-url`**: Sets the Hetzner Cloud API url.
+  - Can be set via the environment variable: `HETZNER_CLOUD_API_URL`
+  - Default: `https://api.hetzner.cloud/v1`
+
+#### Hetzner DNS-Specific Arguments:
 - **`--dns-token`**: Sets the Hetzner DNS API token.
   - Can be set via the environment variable: `DNS_TOKEN`
   - Example: `--dns-token <your-hetzner-dns-token>`
@@ -108,6 +120,7 @@ In this example, the tags defined in the Nomad job file ensure that services are
 
 ## Supported DNS Providers
 
+- **Hetzner Cloud**
 - **Hetzner DNS**
 
 ## Contributing
