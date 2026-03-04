@@ -1,18 +1,18 @@
 use std::time::Duration;
 
-use clap::Parser;
-
 use anyhow::Result;
-use consul_external_dns::hetzner_dns;
+use clap::Parser;
+use consul_external_dns::hetzner_cloud::HetznerCloud;
 use reqwest::Client;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info};
+use tracing_subscriber::EnvFilter;
 
 use consul_external_dns::config::{Config, DnsProvider};
 use consul_external_dns::consul::ConsulClient;
 use consul_external_dns::dns_trait::DnsProviderTrait;
-use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
-use tracing_subscriber::EnvFilter;
+use consul_external_dns::hetzner_dns;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
             config,
             reqwest_client: Client::new(),
         }),
+        DnsProvider::HetznerCloud(config) => Box::new(HetznerCloud::new(config)?),
     };
 
     // Initialize Consul Client

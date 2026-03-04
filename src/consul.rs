@@ -2,11 +2,7 @@ use anyhow::{bail, Context, Result};
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use reqwest::{StatusCode, Url};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    future::Future,
-    time::{Duration, SystemTime},
-};
+use std::{collections::HashMap, future::Future, time::Duration};
 use tokio::{
     task::JoinHandle,
     time::{interval, MissedTickBehavior},
@@ -18,35 +14,6 @@ use uuid::Uuid;
 use crate::dns_trait::DnsType;
 
 const CONSUL_STORE_KEY: &str = "consul_external_dns/";
-
-#[derive(Copy, Clone)]
-enum SessionDuration {
-    Seconds(u32),
-}
-
-impl TryFrom<Duration> for SessionDuration {
-    type Error = anyhow::Error;
-
-    fn try_from(value: Duration) -> Result<Self> {
-        // Consul only supports durations of up to 86400 seconds.
-        let secs = value.as_secs();
-        if secs > 86400 {
-            bail!("Tried to convert a duration longer than 24 hours into SessionDuration");
-        }
-        Ok(SessionDuration::Seconds(secs as u32))
-    }
-}
-
-impl Serialize for SessionDuration {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&match self {
-            Self::Seconds(s) => format!("{s}s"),
-        })
-    }
-}
 
 #[derive(serde::Serialize)]
 struct CreateSessionRequest {
@@ -76,11 +43,6 @@ pub struct DnsRecord {
     pub type_: DnsType,
     pub ttl: Option<i32>,
     pub value: String,
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-struct ConsulLock {
-    pub locked_at: SystemTime,
 }
 
 #[derive(Debug, Deserialize)]
